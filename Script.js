@@ -1,123 +1,61 @@
-document.addEventListener('DOMContentLoaded', () => {
- 
-  const newsContainer = document.getElementById('news-container');
-  const searchInput = document.getElementById('search-input');
-  const searchBtn = document.getElementById('search-btn');
-  const categoryBtns = document.querySelectorAll('.category-btn');
+const apiKey = "ce35ce93c19f45689d2fea0c01902bb1";
 
-  let currentCategory = 'general';
-  let currentSearchTerm = '';
-
-  function init() {
-    fetchNews(currentCategory);
-    setupEventListeners();
-  }
-
-  function setupEventListeners() {
-    searchBtn.addEventListener('click', handleSearch);
-    searchInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        handleSearch();
+$(document).ready(function() {
+  // Load navbar & footer
+  $("#navbar-container").load("navbar.html", function() {
+    const current = location.pathname.split("/").pop();
+    $(".nav-link").each(function() {
+      if ($(this).attr("href") === current) {
+        $(this).addClass("active");
       }
     });
+  });
 
-    categoryBtns.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        categoryBtns.forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
+  $("#footer-container").load("footer.html");
 
-        currentCategory = btn.getAttribute('data-category');
-        currentSearchTerm = '';
-        searchInput.value = '';
+  // Load berita pertama kali
+  loadNews("general");
 
-        fetchNews(currentCategory);
-      });
-    });
-  }
+  // Klik kategori
+  $(".news-category").click(function() {
+    const category = $(this).data("category");
+    loadNews(category);
+  });
+});
 
-  function handleSearch() {
-    const searchTerm = searchInput.value.trim();
-    if (searchTerm) {
-      currentSearchTerm = searchTerm;
-      fetchNews(currentCategory, searchTerm);
-    }
-  }
+function loadNews(category = "general") {
+  const container = $("#news-container");
+  container.html("<p class='text-center text-muted'>Loading news...</p>");
 
-  function fetchNews(category, searchTerm = '') {
-  newsContainer.innerHTML = `
-    <div class="loading">
-      <i class="fas fa-spinner"></i>
-      <p>Loading news articles...</p>
-    </div>
-  `;
+  const url = `https://newsapi.org/v2/top-headlines?country=us&category=${category}&apiKey=${apiKey}`;
 
-  // Ganti URL langsung ke API dengan panggilan ke proxy di Vercel
-  let url = `/api/news?category=${category}`;
-  if (searchTerm) {
-    url = `/api/news?q=${encodeURIComponent(searchTerm)}`;
-  }
+  // ✅ Pakai proxy publik (agar bisa di-host di Vercel)
+  const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
 
-  fetch(url)
-    .then((response) => {
-      if (!response.ok) throw new Error('Network response was not ok');
-      return response.json();
-    })
-    .then((data) => {
-      displayNews(data.articles);
-    })
-    .catch((error) => {
-      newsContainer.innerHTML = `
-        <div class="error-message">
-          <i class="fas fa-exclamation-triangle"></i>
-          <h3>Failed to load news</h3>
-          <p>Please check your connection and try again.</p>
-          <p>Error: ${error.message}</p>
-        </div>
-      `;
-      console.error('Error fetching news:', error);
-    });
-}
+  $.getJSON(proxyUrl, function(data) {
+    container.html("");
 
-  function displayNews(articles) {
-    if (!articles || articles.length === 0) {
-      newsContainer.innerHTML = `
-        <div class="error-message">
-          <i class="fas fa-newspaper"></i>
-          <h3>No news articles found</h3>
-          <p>Try a different search term or category.</p>
-        </div>
-      `;
+    if (!data.articles || !data.articles.length) {
+      container.html("<p class='text-center text-muted'>No news available.</p>");
       return;
     }
 
-    newsContainer.innerHTML = '';
-
-    articles.forEach((article) => {
-      const newsCard = document.createElement('div');
-      newsCard.className = 'news-card';
-
-      const publishedDate = new Date(article.publishedAt).toLocaleDateString();
-
-      newsCard.innerHTML = `
-        <div class="news-image">
-          <img src="${article.urlToImage || 'https://via.placeholder.com/400x200?text=No+Image'}" alt="${article.title}" />
-        </div>
-        <div class="news-content">
-          <div class="news-source">
-            <span>${article.source.name}</span>
-            <span>${publishedDate}</span>
+    data.articles.slice(0, 9).forEach(a => {
+      container.append(`
+        <div class="col-md-4 col-sm-6">
+          <div class="card h-100 shadow-sm border-0">
+            <img src="${a.urlToImage || 'https://via.placeholder.com/400x200'}" class="card-img-top" style="height:180px;object-fit:cover;">
+            <div class="card-body d-flex flex-column">
+              <h6 class="fw-bold text-primary">${a.title || 'No Title'}</h6>
+              <small class="text-muted mb-2">${a.source?.name || ''}</small>
+              <p class="text-truncate">${a.description || 'No description available.'}</p>
+              <a href="${a.url}" target="_blank" class="btn btn-primary btn-sm mt-auto">Read More</a>
+            </div>
           </div>
-          <h3 class="news-title">${article.title}</h3>
-          <p class="news-desc">${article.description || 'No description available.'}</p>
-          <a href="${article.url}" target="_blank" rel="noopener" class="news-link">
-            Read more <i class="fas fa-arrow-right"></i>
-          </a>
         </div>
-      `;
-
-      newsContainer.appendChild(newsCard);
+      `);
     });
-  }
-
-  init();
-});
+  }).fail(() => {
+    container.html("<p class='text-center text-danger'>Failed to load news.</p>");
+  });
+}
